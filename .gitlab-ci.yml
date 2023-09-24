@@ -1,0 +1,74 @@
+stages:
+  - build
+  - deploy
+  - change-image-tag
+
+docker-build: &template-build-docker-image
+  # Official docker image.
+  image: docker:latest
+  stage: build
+  # variables:
+  #   CI_COMMIT_REF_SLUG:
+  #   CI_COMMIT_SHORT_SHA:
+  #   CI_PROJECT_NAME:
+  #   CI_REGISTRY:
+  #   CI_REGISTRY_USER:
+  #   CI_REGISTRY_PASSWORD:
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - docker build --pull -t "$CI_REGISTRY_USER/$CI_PROJECT_NAME:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_USER/$CI_PROJECT_NAME:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  only:
+    refs:
+      - dev
+    changes:
+      - Dockerfile
+      - .gitlab-ci.yml
+      - app/**/*
+      - requirements.txt
+      - run.py
+      - setup.py
+
+docker-build-prod:
+  <<: *template-build-docker-image
+  only:
+    refs:
+      - prod
+
+change-image-tag-helm: &change-image-tag-helm
+  image: 
+    name: robertsilvatech/ubuntu-with-git:20.04
+    entrypoint: [ '/bin/bash', '-c', 'ln -snf /bin/bash /bin/sh && /bin/bash -c $0' ]
+  needs: 
+    - docker-build
+  stage: change-image-tag
+  variables:
+    CONFIG_REPO_NAME: sample-gitops-example-dev-team
+    PROJECT_FOLDER: sample-python-application
+  before_script:
+    - git config --global user.email "ci@argo" && git config --global user.name "Gitlab CI"    
+  script:
+    - echo "cloning config repo $CONFIG_REPO_NAME"
+    - git clone "https://$GIT_TOKEN_USER:$GIT_TOKEN@gitlab.com/robertsilvatech/$CONFIG_REPO_NAME.git"
+    - echo "Enter $CONFIG_REPO_NAME"
+    - cd $CONFIG_REPO_NAME
+    - echo "list files"
+    - ls -lh
+    - git remote -v
+    - git checkout -b $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
+    - 'ls $PROJECT_FOLDER/helm/values-$CI_COMMIT_REF_SLUG*.yaml | xargs sed -i -r "s/tag: (.*)/tag: $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA/g"'
+    - git status
+    - git add .
+    - git commit -m "Update image tag from CI  on $CI_PROJECT_NAME - $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+    - git push origin $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
+  only:
+    - dev
+
+change-image-tag-helm-prod:
+  <<: *change-image-tag-helm
+  needs: [ docker-build-prod ]
+  only: 
+    - prod
