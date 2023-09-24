@@ -19,15 +19,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      # - name: Dump GitHub context
-      #   env:
-      #     GITHUB_CONTEXT: ${{ toJson(github) }}
-      #   run: echo "$GITHUB_CONTEXT"
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
       
-      # - name: Dump GitHub context
-      #   env:
-      #     secrets: ${{ toJson(secrets) }}
-      #   run: echo "$secrets"
+      - name: Dump GitHub context
+        env:
+          secrets: ${{ toJson(secrets) }}
+        run: echo "$secrets"
 
       - name: Debug secrets
         run: |
