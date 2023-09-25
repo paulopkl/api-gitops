@@ -11,7 +11,7 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     env:
-      ECR_REPOSITORY: "paulo/api-gitops"
+      ECR_REPOSITORY: "paulo/gitops"
       AWS_REGION: us-east-1
     steps:
 
@@ -23,7 +23,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
