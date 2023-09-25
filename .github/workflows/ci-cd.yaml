@@ -99,7 +99,8 @@ jobs:
           env:
             IMAGE_TAG: ${{ steps.branch_name.outputs.branch }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: |
+            cd $CONFIG_REPO_NAME
             git status
             git add .
             git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $IMAGE_TAG - $(date)"
-            git push origin $CONFIG_REPO_NAME-$IMAGE_TAG
+            git push -u origin $CONFIG_REPO_NAME-$IMAGE_TAG
