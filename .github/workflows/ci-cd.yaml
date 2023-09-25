@@ -2,8 +2,7 @@ name: Deploy to ECR
 
 on:
   pull_request:
-    branches: 
-      - main
+    branches:
       - dev
       - prod
 
@@ -13,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ECR_REPOSITORY: "paulo/api-gitops"
-      # IMAGE_TAG: "latest"
     steps:
 
       - name: Check out code
@@ -30,22 +28,9 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Extract branch name
-        id: branch_name
-        run: echo "::set-output name=branch::${{ github.base_ref }}"
-
-      - name: Display branch name
-        run: |
-          echo "Branch name: ${{ steps.branch_name.outputs.branch }}"
-
       - name: Extract short commit SHA
         id: extract-commit-sha
-        run: |
-          echo "::set-output name=short_commit_sha::${GITHUB_SHA::7}"
-
-      - name: Display short commit SHA
-        run: |
-          echo "Short Commit SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}"
+        run: echo "::set-output name=short_commit_sha::${GITHUB_SHA::7}"
 
       - name: Build, tag, and push image to Amazon ECR
         env:
@@ -70,6 +55,17 @@ jobs:
         - name: Check out code
           uses: actions/checkout@v2
 
+        - name: Extract short commit SHA
+          id: extract-commit-sha
+          run: echo "::set-output name=short_commit_sha::${GITHUB_SHA::7}"
+
+        - name: Extract branch name
+          id: branch_name
+          run: echo "::set-output name=branch::${{ github.base_ref }}"
+
+        - name: Display [branch]-[short commit sha]
+          run: echo ${{ steps.branch_name.outputs.branch }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
+
         - name: Configure Git global credentials repository and change current image
           run: |
             git config --global user.email "$GITHUB_USER_EMAIL"
@@ -78,16 +74,10 @@ jobs:
         
         - name: Clone repository
           run: git clone https://${{ secrets.ACCESS_TOKEN }}@github.com/$GITHUB_USER_NAME/$CONFIG_REPO_NAME.git
-        
-        - name: Extract short commit SHA
-          id: extract-commit-sha
-          run: echo "::set-output name=short_commit_sha::${GITHUB_SHA::7}"
-
-        - name: Display branch
-          run: echo ${{ github.repository }}-${{ github.ref }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
 
         - name: Modify image version
           env:
+            TARGET_BRANCH: ${{ steps.branch_name.outputs.branch }} # prod | dev
             SHORT_COMMIT_SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: |
             echo "Enter $CONFIG_REPO_NAME"
@@ -95,77 +85,21 @@ jobs:
             echo "list files"
             ls -lh
             git remote -v
-            git checkout -b ${{ github.repository }}-${{ github.ref }}-$SHORT_COMMIT_SHA
-
-        - name: Extract branch name
-          id: branch_name
-          run: echo "::set-output name=branch::$(echo ${GITHUB_REF#refs/heads/})"
-
-        - name: Slugify branch name
-          id: slugified_branch_name
-          run: |
-            branch=${{ steps.branch_name.outputs.branch }}
-            slugified_branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' | tr ' ' '-')
-            echo "::set-output name=slugified_branch::$slugified_branch"
-
-        - name: Display slugified branch name
-          run: |
-            echo "Slugified branch name: ${{ steps.slugified_branch_name.outputs.slugified_branch }}"
-        
-        - name: Display slugified branch name
-          run: echo ${{ github.ref }}
-        
-        - name: Display slugified branch name
-          run: echo ${{ github.ref }}
+            git checkout -b $CONFIG_REPO_NAME-$TARGET_BRANCH-$SHORT_COMMIT_SHA
 
         - name: Modify image version
+          env:
+            TARGET_BRANCH: ${{ steps.branch_name.outputs.branch }} # prod | dev
+            SHORT_COMMIT_SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: |
-            'ls $PROJECT_FOLDER/helm/values-$CI_COMMIT_REF_SLUG*.yaml | xargs sed -i -r "s/tag: (.*)/tag: $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA/g"'
+            'ls $PROJECT_FOLDER/helm/values-$TARGET_BRANCH.yaml | xargs sed -i -r "s/tag: (.*)/tag: $TARGET_BRANCH-$SHORT_COMMIT_SHA/g"'
         
         - name: Commit and push changes repository
+          env:
+            TARGET_BRANCH: ${{ steps.branch_name.outputs.branch }} # prod | dev
+            SHORT_COMMIT_SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: |
             git status
             git add .
-            git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA - $(date)"
-            git push origin $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
-
-# docker-build-prod:
-#   <<: *template-build-docker-image
-#   only:
-#     refs:
-#       - prod
-
-# change-image-tag-helm: &change-image-tag-helm
-#   image: 
-#     name: robertsilvatech/ubuntu-with-git:20.04
-#     entrypoint: [ '/bin/bash', '-c', 'ln -snf /bin/bash /bin/sh && /bin/bash -c $0' ]
-#   needs: 
-#     - docker-build
-#   stage: change-image-tag
-#   variables:
-#     CONFIG_REPO_NAME: sample-gitops-example-dev-team
-#     PROJECT_FOLDER: sample-python-application
-#   before_script:
-#     - git config --global user.email "ci@argo" && git config --global user.name "Gitlab CI"    
-#   script:
-#     - echo "cloning config repo $CONFIG_REPO_NAME"
-#     - git clone "https://$GIT_TOKEN_USER:$GIT_TOKEN@gitlab.com/robertsilvatech/$CONFIG_REPO_NAME.git"
-#     - echo "Enter $CONFIG_REPO_NAME"
-#     - cd $CONFIG_REPO_NAME
-#     - echo "list files"
-#     - ls -lh
-#     - git remote -v
-#     - git checkout -b $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
-#     - 'ls $PROJECT_FOLDER/helm/values-$CI_COMMIT_REF_SLUG*.yaml | xargs sed -i -r "s/tag: (.*)/tag: $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA/g"'
-#     - git status
-#     - git add .
-#     - git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-#     - git push origin $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
-#   only:
-#     - dev
-
-# change-image-tag-helm-prod:
-#   <<: *change-image-tag-helm
-#   needs: [ docker-build-prod ]
-#   only: 
-#     - prod
+            git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $TARGET_BRANCH-$SHORT_COMMIT_SHA - $(date)"
+            git push origin $CONFIG_REPO_NAME-$TARGET_BRANCH-$SHORT_COMMIT_SHA
