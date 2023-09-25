@@ -78,15 +78,13 @@ jobs:
             git config --global user.email "$GITHUB_USER_EMAIL"
             git config --global user.name "$GITHUB_USER_NAME"
             git config --global credential.helper cache
-        
-        - name: Clone repository
-          run: git clone https://${{ secrets.ACCESS_TOKEN }}@github.com/$GITHUB_USER_NAME/$CONFIG_REPO_NAME.git
 
-        - name: Create new branch and Modify image version
+        - name: Clone repository, Create new branch, Modify image version, push changes
           env:
             TARGET_BRANCH: ${{ steps.branch_name.outputs.branch }}
             IMAGE_TAG: ${{ steps.branch_name.outputs.branch }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: |
+            git clone https://${{ secrets.ACCESS_TOKEN }}@github.com/$GITHUB_USER_NAME/$CONFIG_REPO_NAME.git
             echo "Enter $CONFIG_REPO_NAME"
             cd $CONFIG_REPO_NAME
             echo "list files"
@@ -94,12 +92,6 @@ jobs:
             git remote -v
             git checkout -b $CONFIG_REPO_NAME-$IMAGE_TAG
             ls $PROJECT_FOLDER/helm/values-$TARGET_BRANCH.yaml | xargs sed -i -r "s/tag: (.*)/tag: $IMAGE_TAG/g"
-        
-        - name: Commit and push changes repository
-          env:
-            IMAGE_TAG: ${{ steps.branch_name.outputs.branch }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
-          run: |
-            cd $CONFIG_REPO_NAME
             git status
             git add .
             git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $IMAGE_TAG - $(date)"
