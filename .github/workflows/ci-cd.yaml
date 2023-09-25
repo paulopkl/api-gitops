@@ -105,7 +105,9 @@ jobs:
         
         - name: Display slugified branch name
           run: echo ${{ github.ref }}
-
+        
+        - name: Display slugified branch name
+          run: echo ${{ github.ref }}
 
         - name: Modify image version
           run: |
