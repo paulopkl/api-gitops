@@ -30,6 +30,14 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Extract branch name
+        id: branch_name
+        run: echo "::set-output name=branch::${{ github.head_ref }}"
+
+      - name: Display branch name
+        run: |
+          echo "Branch name: ${{ steps.branch_name.outputs.branch }}"
+
       - name: Extract short commit SHA
         id: extract-commit-sha
         run: |
