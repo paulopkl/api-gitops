@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ECR_REPOSITORY: "paulo/gitops"
-      AWS_REGION: us-east-1
+      AWS_REGION: "us-east-1"
     steps:
 
       - name: Check out code
