@@ -95,6 +95,7 @@ jobs:
 
         - name: Modify image version
           env:
+            TARGET_BRANCH: ${{ steps.branch_name.outputs.branch }}
             IMAGE_TAG: ${{ steps.branch_name.outputs.branch }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
           run: 'ls $PROJECT_FOLDER/helm/values-$TARGET_BRANCH.yaml | xargs sed -i -r "s/tag: (.*)/tag: $IMAGE_TAG/g"'
         
