@@ -32,7 +32,7 @@ jobs:
 
       - name: Extract branch name
         id: branch_name
-        run: echo "::set-output name=branch::${{ github.head_ref }}"
+        run: echo "::set-output name=branch::${{ github.base_ref }}"
 
       - name: Display branch name
         run: |
