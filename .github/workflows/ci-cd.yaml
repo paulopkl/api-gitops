@@ -12,8 +12,8 @@ jobs:
     name: Build Image
     runs-on: ubuntu-latest
     env:
-      ECR_REPOSITORY: "paulo/gitops"
-      IMAGE_TAG: "latest"
+      ECR_REPOSITORY: "paulo/api-gitops"
+      # IMAGE_TAG: "latest"
     steps:
 
       - name: Check out code
@@ -30,30 +30,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - run: echo $GITHUB_REPOSITORY
-
-      - name: Extract project name
-        id: extract-project
-        run: |
-          echo "::set-output name=project_name::$(basename $GITHUB_REPOSITORY)"
-
-      - name: Display project name
-        run: |
-          echo "Project Name: ${{ steps.extract-project.outputs.project_name }}"
-
-      - run: echo $GITHUB_REF
-
-      - name: Extract branch name
-        id: extract-branch
-        run: |
-          echo "::set-output name=branch::$(echo $GITHUB_REF | awk -F'/' '{print $NF}')"
-
-      - name: Display branch name
-        run: |
-          echo "Branch Name: ${{ steps.extract-branch.outputs.branch }}"
-
-      - run: echo $GITHUB_SHA
-
       - name: Extract short commit SHA
         id: extract-commit-sha
         run: |
@@ -63,20 +39,22 @@ jobs:
         run: |
           echo "Short Commit SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}"
 
-      - run: echo $GITHUB_REPOSITORY-$GITHUB_REF-$GITHUB_SHA
-
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build --pull -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
   deploy-me:
+    needs: build
     name: Deploy new image to Help repository
     runs-on: ubuntu-latest
     env:
       CONFIG_REPO_NAME: gitops-helm
+      PROJECT_FOLDER: api-gitops
       GITHUB_USER_EMAIL: palmeida.ipms@gmail.com
       GITHUB_USER_NAME: paulopkl
     steps:
@@ -84,23 +62,64 @@ jobs:
         - name: Check out code
           uses: actions/checkout@v2
 
-        # - name: Configure Git repository and change current image
-        #   run: |
-        #       git config --global user.email "$GITHUB_USER_EMAIL"
-        #       git config --global user.name "$GITHUB_USER_NAME"
-        #       git config --global credential.helper cache
-        #       git clone https://${{ secrets.ACCESS_TOKEN }}@github.com/$GITHUB_USER_NAME/$CONFIG_REPO_NAME.git
-        #       echo "Enter $CONFIG_REPO_NAME"
-        #       cd $CONFIG_REPO_NAME
-        #       echo "list files"
-        #       ls -lh
-        #       git remote -v
-        #       git checkout -b $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
-        #       'ls $PROJECT_FOLDER/helm/values-$CI_COMMIT_REF_SLUG*.yaml | xargs sed -i -r "s/tag: (.*)/tag: $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA/g"'
-        #       git status
-        #       git add .
-        #       git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA - $(date)"
-        #       git push origin $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
+        - name: Configure Git global credentials repository and change current image
+          run: |
+            git config --global user.email "$GITHUB_USER_EMAIL"
+            git config --global user.name "$GITHUB_USER_NAME"
+            git config --global credential.helper cache
+        
+        - name: Clone repository
+          run: git clone https://${{ secrets.ACCESS_TOKEN }}@github.com/$GITHUB_USER_NAME/$CONFIG_REPO_NAME.git
+        
+        - name: Extract short commit SHA
+          id: extract-commit-sha
+          run: echo "::set-output name=short_commit_sha::${GITHUB_SHA::7}"
+
+        - name: Display branch
+          run: echo ${{ github.repository }}-${{ github.ref }}-${{ steps.extract-commit-sha.outputs.short_commit_sha }}
+
+        - name: Modify image version
+          env:
+            SHORT_COMMIT_SHA: ${{ steps.extract-commit-sha.outputs.short_commit_sha }}
+          run: |
+            echo "Enter $CONFIG_REPO_NAME"
+            cd $CONFIG_REPO_NAME
+            echo "list files"
+            ls -lh
+            git remote -v
+            git checkout -b ${{ github.repository }}-${{ github.ref }}-$SHORT_COMMIT_SHA
+
+        - name: Extract branch name
+          id: branch_name
+          run: echo "::set-output name=branch::$(echo ${GITHUB_REF#refs/heads/})"
+
+        - name: Slugify branch name
+          id: slugified_branch_name
+          run: |
+            branch=${{ steps.branch_name.outputs.branch }}
+            slugified_branch=$(echo "$branch" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' | tr ' ' '-')
+            echo "::set-output name=slugified_branch::$slugified_branch"
+
+        - name: Display slugified branch name
+          run: |
+            echo "Slugified branch name: ${{ steps.slugified_branch_name.outputs.slugified_branch }}"
+        
+        - name: Display slugified branch name
+          run: echo ${{ github.ref }}
+        
+        - name: Display slugified branch name
+          run: echo ${{ github.ref }}
+
+        - name: Modify image version
+          run: |
+            'ls $PROJECT_FOLDER/helm/values-$CI_COMMIT_REF_SLUG*.yaml | xargs sed -i -r "s/tag: (.*)/tag: $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA/g"'
+        
+        - name: Commit and push changes repository
+          run: |
+            git status
+            git add .
+            git commit -m "Update image tag from CI on $CI_PROJECT_NAME - $CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA - $(date)"
+            git push origin $CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
 
 # docker-build-prod:
 #   <<: *template-build-docker-image
